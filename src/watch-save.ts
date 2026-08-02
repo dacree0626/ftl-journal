@@ -1,121 +1,163 @@
+/**
+ * Watches the active FTL: Multiverse save file and archives stable copies.
+ *
+ * Each watcher launch creates a separate session directory. Every detected
+ * save change is copied into that session as a numbered snapshot.
+ */
+
 import { watch } from "node:fs";
 import { copyFile, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 const SAVE_FILE = String.raw`C:\Users\dacre\OneDrive\Documents\My Games\FasterThanLight\hs_mv_continue.sav`;
-const ARCHIVE_DIRECTORY = path.resolve("ftl-save-archive");
+
+const ARCHIVE_ROOT_DIRECTORY = path.resolve("ftl-save-archive");
 const STABILITY_DELAY_MS = 300;
 const MAX_STABILITY_CHECKS = 10;
+
+const sessionId = createTimestamp();
+const SESSION_DIRECTORY = path.join(
+  ARCHIVE_ROOT_DIRECTORY,
+  `session-${sessionId}`,
+);
 
 let snapshotNumber = 0;
 let copyTimer: NodeJS.Timeout | undefined;
 let lastSavedModifiedTime = 0;
 
-
-
 function createTimestamp(): string {
-    return new Date()
-        .toISOString()
-        .replaceAll(":", "-")
-        .replaceAll(".", "-");
+  return new Date()
+    .toISOString()
+    .replaceAll(":", "-")
+    .replaceAll(".", "-");
 }
 
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
+/**
+ * Checks the save repeatedly until its size and modification time stop
+ * changing. This reduces the risk of copying while FTL is still writing.
+ */
 async function waitForStableSave(): Promise<boolean> {
-    for (let attempt = 0; attempt < MAX_STABILITY_CHECKS; attempt += 1) {
-        const firstCheck = await stat(SAVE_FILE);
+  for (let attempt = 1; attempt <= MAX_STABILITY_CHECKS; attempt += 1) {
+    const firstCheck = await stat(SAVE_FILE);
 
-        await new Promise((resolve) => {
-            setTimeout(resolve, STABILITY_DELAY_MS);
-        });
+    await sleep(STABILITY_DELAY_MS);
 
-        const secondCheck = await stat(SAVE_FILE);
+    const secondCheck = await stat(SAVE_FILE);
 
-        const fileIsStable =
-            firstCheck.size === secondCheck.size &&
-            firstCheck.mtimeMs === secondCheck.mtimeMs;
+    const fileIsStable =
+      firstCheck.size === secondCheck.size &&
+      firstCheck.mtimeMs === secondCheck.mtimeMs;
 
-        if (fileIsStable) {
-            return true;
-        }
+    if (fileIsStable) {
+      return true;
     }
+  }
 
-    return false;
+  return false;
 }
 
 async function archiveSave(): Promise<void> {
-    try {
-        const saveStats = await stat(SAVE_FILE);
+  try {
+    const saveStats = await stat(SAVE_FILE);
 
-        if (saveStats.mtimeMs === lastSavedModifiedTime) {
-            return;
-        }
-
-        lastSavedModifiedTime = saveStats.mtimeMs;
-        snapshotNumber += 1;
-
-        await mkdir(ARCHIVE_DIRECTORY, { recursive: true });
-
-        const extension = path.extname(SAVE_FILE);
-        const timestamp = createTimestamp();
-
-        const archiveName =
-            `snapshot-${String(snapshotNumber).padStart(4, "0")}-${timestamp}${extension}`;
-
-        const archivePath = path.join(ARCHIVE_DIRECTORY, archiveName);
-
-        await copyFile(SAVE_FILE, archivePath);
-
-        console.log(
-            `Saved snapshot ${snapshotNumber} at ${new Date().toLocaleTimeString()}`
-        );
-        console.log(`File modified: ${saveStats.mtime.toLocaleTimeString()}`);
-        console.log(archivePath);
-    } catch (error) {
-        console.error("Could not archive the save file:", error);
+    // Ignore duplicate notifications for the same completed file write.
+    if (saveStats.mtimeMs === lastSavedModifiedTime) {
+      return;
     }
+
+    lastSavedModifiedTime = saveStats.mtimeMs;
+    snapshotNumber += 1;
+
+    const extension = path.extname(SAVE_FILE);
+    const paddedSnapshotNumber = String(snapshotNumber).padStart(4, "0");
+    const snapshotName = `snapshot-${paddedSnapshotNumber}${extension}`;
+    const archivePath = path.join(SESSION_DIRECTORY, snapshotName);
+
+    await copyFile(SAVE_FILE, archivePath);
+
+    console.log(
+      `Saved snapshot ${snapshotNumber} at ${new Date().toLocaleTimeString()}`,
+    );
+    console.log(`File modified: ${saveStats.mtime.toLocaleTimeString()}`);
+    console.log(archivePath);
+    console.log();
+  } catch (error) {
+    console.error("Could not archive the save file:", error);
+  }
+}
+
+async function processSaveChange(): Promise<void> {
+  try {
+    const fileIsStable = await waitForStableSave();
+
+    if (!fileIsStable) {
+      console.error(
+        `Save file did not become stable after ${MAX_STABILITY_CHECKS} checks.`,
+      );
+      return;
+    }
+
+    await archiveSave();
+  } catch (error) {
+    console.error("Could not process the save-file change:", error);
+  }
 }
 
 async function startWatching(): Promise<void> {
-    await mkdir(ARCHIVE_DIRECTORY, { recursive: true });
+  await mkdir(SESSION_DIRECTORY, { recursive: true });
 
-    console.log("Watching FTL save file:");
-    console.log(SAVE_FILE);
-    console.log();
-    console.log("Archive directory:");
-    console.log(ARCHIVE_DIRECTORY);
-    console.log();
-    console.log("Press Ctrl+C to stop.");
+  console.log("Watching FTL save file:");
+  console.log(SAVE_FILE);
+  console.log();
 
-    await archiveSave();
+  console.log("Session ID:");
+  console.log(sessionId);
+  console.log();
 
-    const saveDirectory = path.dirname(SAVE_FILE);
-    const saveFileName = path.basename(SAVE_FILE);
+  console.log("Session directory:");
+  console.log(SESSION_DIRECTORY);
+  console.log();
 
-    watch(saveDirectory, (_eventType, changedFileName) => {
-        if (changedFileName !== saveFileName) {
-            return;
-        }
+  console.log("Press Ctrl+C to stop.");
+  console.log();
 
-        if (copyTimer) {
-            clearTimeout(copyTimer);
-        }
+  // Preserve the save state that existed when this watcher session began.
+  await archiveSave();
 
-        copyTimer = setTimeout(() => {
-            void (async () => {
-                const fileIsStable = await waitForStableSave();
+  const saveDirectory = path.dirname(SAVE_FILE);
+  const saveFileName = path.basename(SAVE_FILE);
 
-                if (!fileIsStable) {
-                    console.error("Save file did not become stable.");
-                    return;
-                }
+  /*
+   * Watch the containing directory rather than the save file itself.
+   * Applications may replace a file during saving, which can invalidate a
+   * watcher attached directly to the original file.
+   */
+  watch(saveDirectory, (_eventType, changedFileName) => {
+    if (changedFileName !== saveFileName) {
+      return;
+    }
 
-                await archiveSave();
-            })();
-        }, 300);
-    });
+    /*
+     * Windows can emit many notifications for one logical save. Resetting this
+     * timer groups the notification burst into one processing attempt.
+     */
+    if (copyTimer) {
+      clearTimeout(copyTimer);
+    }
+
+    copyTimer = setTimeout(() => {
+      void processSaveChange();
+    }, STABILITY_DELAY_MS);
+  });
 }
 
 startWatching().catch((error: unknown) => {
-    console.error("Watcher failed to start:", error);
-    process.exitCode = 1;
+  console.error("Watcher failed to start:", error);
+  process.exitCode = 1;
 });
