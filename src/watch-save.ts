@@ -8,8 +8,22 @@
 import { watch } from "node:fs";
 import { copyFile, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
+import "dotenv/config";
 
-const SAVE_FILE = String.raw`C:\Users\dacre\OneDrive\Documents\My Games\FasterThanLight\hs_mv_continue.sav`;
+
+function getRequiredEnvironmentVariable(name: string): string {
+  const value = process.env[name];
+
+  if (!value) {
+    throw new Error(`${name} is not configured in the .env file.`);
+  }
+
+  return value;
+}
+
+
+const SAVE_FILE = getRequiredEnvironmentVariable("SAVE_FILE");
+
 
 const ARCHIVE_ROOT_DIRECTORY = path.resolve("ftl-save-archive");
 const STABILITY_DELAY_MS = 300;
