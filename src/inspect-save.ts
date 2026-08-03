@@ -2,16 +2,6 @@ import "dotenv/config";
 
 import { readFile } from "node:fs/promises";
 
-interface ParsedInteger {
-    value: number;
-    nextOffset: number;
-}
-
-interface ParsedString {
-    value: string;
-    nextOffset: number;
-}
-
 interface SaveStatistic {
     name: string;
     value: number;
@@ -41,6 +31,11 @@ interface ParsedPlayerShipStart {
     nextOffset: number;
 }
 
+interface FoundString {
+    offset: number;
+    value: string;
+}
+
 function getRequiredEnvironmentVariable(name: string): string {
     const value = process.env[name];
 
@@ -51,7 +46,14 @@ function getRequiredEnvironmentVariable(name: string): string {
     return value;
 }
 
-const SAVE_FILE = getRequiredEnvironmentVariable("SAVE_FILE");
+const commandLineArguments = parseCommandLineArguments();
+
+const SAVE_FILE =
+    commandLineArguments.saveFile ??
+    getRequiredEnvironmentVariable("SAVE_FILE");
+
+const searchTerm = commandLineArguments.searchTerm;
+
 const BYTES_PER_ROW = 16;
 const BYTES_TO_DISPLAY = 256;
 
@@ -97,6 +99,7 @@ function printHexDump(buffer: Buffer): void {
 // coordinates everything
 async function inspectSave(): Promise<void> {
     const saveData = await readFile(SAVE_FILE);
+    const foundStrings = findPrintableStrings(saveData);
 
     console.log(`File: ${SAVE_FILE}`);
     console.log(`Size: ${saveData.length} bytes`);
@@ -118,26 +121,47 @@ async function inspectSave(): Promise<void> {
 
     printPlayerShipStart(playerShipStart);
 
-    console.log(`Bytes beginning at nextOffset (${playerShipStart.nextOffset}):`);
-    console.log();
+    if (searchTerm) {
+        const foundStrings = findPrintableStrings(saveData);
+        const matches = findStringMatches(foundStrings, searchTerm);
 
-    printInt32DumpFromOffset(
-        saveData,
-        playerShipStart.nextOffset,
-        40,
-    );
+        console.log();
+        console.log(`String matches for "${searchTerm}":`);
+        console.log();
 
-    printHexDumpFromOffset(
-        saveData,
-        playerShipStart.nextOffset,
-        256,
-    );
+        if (matches.length === 0) {
+            console.log("No matches found.");
+        } else {
+            printFoundStrings(matches);
+        }
+    }
 
-    console.log();
-    console.log("Raw hex:");
-    console.log();
+    // console.log(`Bytes beginning at nextOffset (${playerShipStart.nextOffset}):`);
+    // console.log();
 
-    printHexDump(saveData);
+    // console.log();
+    // console.log("Printable strings found in entire save:");
+    // console.log();
+
+    // printFoundStrings(foundStrings);
+
+    //     printInt32DumpFromOffset(
+    //         saveData,
+    //         playerShipStart.nextOffset,
+    //         40,
+    //     );
+
+    //     printHexDumpFromOffset(
+    //         saveData,
+    //         playerShipStart.nextOffset,
+    //         256,
+    //     );
+
+    //     console.log();
+    //     console.log("Raw hex:");
+    //     console.log();
+
+    //     printHexDump(saveData);
 }
 
 // decode individual binary values
@@ -366,6 +390,97 @@ function printInt32DumpFromOffset(
 
         offset += 4;
     }
+}
+
+function findPrintableStrings(
+    buffer: Buffer,
+    minimumLength = 4,
+): FoundString[] {
+    const results: FoundString[] = [];
+    let startOffset: number | undefined;
+
+    for (let offset = 0; offset <= buffer.length; offset += 1) {
+        const byte = buffer[offset];
+
+        const isPrintable =
+            byte !== undefined &&
+            byte >= 32 &&
+            byte <= 126;
+
+        if (isPrintable && startOffset === undefined) {
+            startOffset = offset;
+        }
+
+        if (!isPrintable && startOffset !== undefined) {
+            const length = offset - startOffset;
+
+            if (length >= minimumLength) {
+                results.push({
+                    offset: startOffset,
+                    value: buffer.toString(
+                        "utf8",
+                        startOffset,
+                        offset,
+                    ),
+                });
+            }
+
+            startOffset = undefined;
+        }
+    }
+
+    return results;
+}
+
+function printFoundStrings(strings: FoundString[]): void {
+    for (const found of strings) {
+        const offsetHex = found.offset
+            .toString(16)
+            .padStart(8, "0")
+            .toUpperCase();
+
+        console.log(`${offsetHex}  ${found.value}`);
+    }
+}
+
+function findStringMatches(
+    strings: FoundString[],
+    searchTerm: string,
+): FoundString[] {
+    const normalizedSearchTerm = searchTerm.toLowerCase();
+
+    return strings.filter((found) =>
+        found.value.toLowerCase().includes(normalizedSearchTerm),
+    );
+}
+
+interface CommandLineArguments {
+    saveFile: string | undefined;
+    searchTerm: string | undefined;
+}
+
+function parseCommandLineArguments(): CommandLineArguments {
+    const userArguments = process.argv.slice(2);
+
+    let saveFile: string | undefined;
+    let searchTerm: string | undefined;
+
+    // parser...
+
+    for (let index = 0; index < userArguments.length; index++) {
+        if (userArguments[index] === "--find") {
+            searchTerm = userArguments[index + 1];
+            break;
+        }
+        else {
+            saveFile = userArguments[index]
+        }
+    }
+
+    return {
+        saveFile,
+        searchTerm,
+    };
 }
 
 inspectSave().catch((error: unknown) => {
