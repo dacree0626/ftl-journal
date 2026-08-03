@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "watch": "tsx src/watch-save.ts"
+    "watch": "tsx src/watch-save.ts",
+    "inspect": "tsx src/inspect-save.ts"
   },
   "keywords": [],
   "author": "",
