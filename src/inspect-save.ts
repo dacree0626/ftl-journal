@@ -1,41 +1,95 @@
 import "dotenv/config";
-
 import { readFile } from "node:fs/promises";
+import {
+    parseInitialCrew,
+    parsePlayerShipStart,
+    parseSaveHeader,
+} from "./save-parser.js";
+
+import type {
+    ParsedInitialCrew,
+    ParsedPlayerShipStart,
+    ParsedSaveHeader,
+} from "./save-parser.js";
+
+import {
+    findPrintableStrings,
+} from "./save-analysis.js"
+
+import type {
+    FoundString,
+} from "./save-analysis.js"
+
+
+
+import { parse } from "node:path";
+
+const commandLineArguments = parseCommandLineArguments();
+
+const SAVE_FILE =
+    commandLineArguments.saveFile ??
+    getRequiredEnvironmentVariable("SAVE_FILE");
+
+const searchTerm = commandLineArguments.searchTerm;
+
+const contextBytes =
+    commandLineArguments.contextBytes;
+
+const BYTES_PER_ROW = 16;
+const BYTES_TO_DISPLAY = 256;
 
 interface SaveStatistic {
     name: string;
     value: number;
 }
 
-interface ParsedStatistics {
-    values: SaveStatistic[];
-    nextOffset: number;
+
+
+interface CommandLineArguments {
+    saveFile: string | undefined;
+    searchTerm: string | undefined;
+    contextBytes: number | undefined;
 }
 
-interface ParsedSaveHeader {
-    unknownHeaderValues: number[];
-    shipName: string;
-    shipBlueprintId: string;
-    unknownInt9: number;
-    unknownInt10: number;
-    statistics: SaveStatistic[];
-    nextOffset: number;
-}
+function parseCommandLineArguments(): CommandLineArguments {
+    const userArguments = process.argv.slice(2);
 
-interface ParsedPlayerShipStart {
-    unknownValue1: number;
-    unknownValue2: number;
-    blueprintId: string;
-    shipName: string;
-    unknownShipId: string;
-    nextOffset: number;
-}
+    let saveFile: string | undefined;
+    let searchTerm: string | undefined;
+    let contextBytes: number | undefined;
 
-interface FoundString {
-    offset: number;
-    value: string;
-}
+    for (let index = 0; index < userArguments.length; index++) {
+        const argument = userArguments[index];
 
+        if (argument === "--find") {
+            searchTerm = userArguments[index + 1];
+            index += 1;
+            continue;
+        }
+
+        if (argument === "--context") {
+            const nextArgument = userArguments[index + 1];
+
+            if (nextArgument) {
+                contextBytes = Number.parseInt(
+                    nextArgument,
+                    10
+                );
+            }
+
+            index += 1;
+            continue;
+        }
+
+        saveFile = argument;
+    }
+
+    return {
+        saveFile,
+        searchTerm,
+        contextBytes
+    };
+}
 function getRequiredEnvironmentVariable(name: string): string {
     const value = process.env[name];
 
@@ -46,17 +100,6 @@ function getRequiredEnvironmentVariable(name: string): string {
     return value;
 }
 
-const commandLineArguments = parseCommandLineArguments();
-
-const SAVE_FILE =
-    commandLineArguments.saveFile ??
-    getRequiredEnvironmentVariable("SAVE_FILE");
-
-const searchTerm = commandLineArguments.searchTerm;
-
-const BYTES_PER_ROW = 16;
-const BYTES_TO_DISPLAY = 256;
-
 function formatHexByte(value: number): string {
     return value.toString(16).padStart(2, "0").toUpperCase();
 }
@@ -65,200 +108,6 @@ function formatPrintableByte(value: number): string {
     return value >= 32 && value <= 126
         ? String.fromCharCode(value)
         : ".";
-}
-
-// display unknown bytes for investigation
-function printHexDump(buffer: Buffer): void {
-    const bytesToRead = Math.min(buffer.length, BYTES_TO_DISPLAY);
-
-    for (let offset = 0; offset < bytesToRead; offset += BYTES_PER_ROW) {
-        const row = buffer.subarray(
-            offset,
-            Math.min(offset + BYTES_PER_ROW, bytesToRead),
-        );
-
-        const offsetText = offset
-            .toString(16)
-            .padStart(8, "0")
-            .toUpperCase();
-
-        const hexText = Array.from(row)
-            .map(formatHexByte)
-            .join(" ")
-            .padEnd(BYTES_PER_ROW * 3 - 1, " ");
-
-        const printableText = Array.from(row)
-            .map(formatPrintableByte)
-            .join("");
-
-        console.log(`${offsetText}  ${hexText}  |${printableText}|`);
-    }
-}
-
-// reads the file
-// coordinates everything
-async function inspectSave(): Promise<void> {
-    const saveData = await readFile(SAVE_FILE);
-    const foundStrings = findPrintableStrings(saveData);
-
-    console.log(`File: ${SAVE_FILE}`);
-    console.log(`Size: ${saveData.length} bytes`);
-    console.log(`Showing first ${Math.min(saveData.length, BYTES_TO_DISPLAY)} bytes`);
-    console.log();
-
-    console.log("Parsed fields:");
-    console.log();
-
-    const parsedHeader = parseSaveHeader(saveData);
-    printSaveHeader(parsedHeader);
-
-    console.log();
-
-    const playerShipStart = parsePlayerShipStart(
-        saveData,
-        parsedHeader.nextOffset,
-    );
-
-    printPlayerShipStart(playerShipStart);
-
-    if (searchTerm) {
-        const foundStrings = findPrintableStrings(saveData);
-        const matches = findStringMatches(foundStrings, searchTerm);
-
-        console.log();
-        console.log(`String matches for "${searchTerm}":`);
-        console.log();
-
-        if (matches.length === 0) {
-            console.log("No matches found.");
-        } else {
-            printFoundStrings(matches);
-        }
-    }
-
-    // console.log(`Bytes beginning at nextOffset (${playerShipStart.nextOffset}):`);
-    // console.log();
-
-    // console.log();
-    // console.log("Printable strings found in entire save:");
-    // console.log();
-
-    // printFoundStrings(foundStrings);
-
-    //     printInt32DumpFromOffset(
-    //         saveData,
-    //         playerShipStart.nextOffset,
-    //         40,
-    //     );
-
-    //     printHexDumpFromOffset(
-    //         saveData,
-    //         playerShipStart.nextOffset,
-    //         256,
-    //     );
-
-    //     console.log();
-    //     console.log("Raw hex:");
-    //     console.log();
-
-    //     printHexDump(saveData);
-}
-
-// decode individual binary values
-function readString(
-    buffer: Buffer,
-    offset: number,
-): { value: string; nextOffset: number } {
-    const length = buffer.readInt32LE(offset);
-    const stringStart = offset + 4;
-    const stringEnd = stringStart + length;
-
-    return {
-        value: buffer.toString("utf8", stringStart, stringEnd),
-        nextOffset: stringEnd,
-    };
-}
-
-// parses the first known section
-function parseSaveHeader(buffer: Buffer): ParsedSaveHeader {
-    let offset = 0;
-    const unknownHeaderValues: number[] = [];
-
-    for (let index = 0; index < 8; index += 1) {
-        const result = readInt32(buffer, offset);
-
-        unknownHeaderValues.push(result.value);
-        offset = result.nextOffset;
-    }
-
-    const shipNameResult = readString(buffer, offset);
-    offset = shipNameResult.nextOffset;
-
-    const shipBlueprintResult = readString(buffer, offset);
-    offset = shipBlueprintResult.nextOffset;
-
-    const unknownInt9Result = readInt32(buffer, offset);
-    offset = unknownInt9Result.nextOffset;
-
-    const unknownInt10Result = readInt32(buffer, offset);
-    offset = unknownInt10Result.nextOffset;
-
-    const statCountResult = readInt32(buffer, offset);
-    offset = statCountResult.nextOffset;
-
-    const statisticsResult = parseStatistics(
-        buffer,
-        offset,
-        statCountResult.value,
-    );
-
-    return {
-        unknownHeaderValues,
-        shipName: shipNameResult.value,
-        shipBlueprintId: shipBlueprintResult.value,
-        unknownInt9: unknownInt9Result.value,
-        unknownInt10: unknownInt10Result.value,
-        statistics: statisticsResult.values,
-        nextOffset: statisticsResult.nextOffset,
-    };
-}
-
-// decode individual binary values
-function readInt32(
-    buffer: Buffer,
-    offset: number,
-): { value: number; nextOffset: number } {
-    return {
-        value: buffer.readInt32LE(offset),
-        nextOffset: offset + 4,
-    };
-}
-
-// parses the repeated stat entries
-function parseStatistics(
-    buffer: Buffer,
-    offset: number,
-    count: number,
-): ParsedStatistics {
-    const values: SaveStatistic[] = [];
-
-    for (let index = 0; index < count; index += 1) {
-        const nameResult = readString(buffer, offset);
-        offset = nameResult.nextOffset;
-
-        const valueResult = readInt32(buffer, offset);
-        offset = valueResult.nextOffset;
-
-        values.push({
-            name: nameResult.value,
-            value: valueResult.value,
-        });
-    }
-
-    return {
-        values,
-        nextOffset: offset,
-    };
 }
 
 // display parsed objects, save
@@ -281,6 +130,51 @@ function printSaveHeader(header: ParsedSaveHeader): void {
     console.log(`nextOffset: ${header.nextOffset}`);
 }
 
+function printStringMatchContext(
+    buffer: Buffer,
+    foundString: FoundString,
+    searchTerm: string,
+    contextBytes: number,
+): void {
+    const matchIndex = foundString.value
+        .toLowerCase()
+        .indexOf(searchTerm.toLowerCase());
+
+    const matchOffset =
+        foundString.offset +
+        Math.max(matchIndex, 0);
+
+    const contextStart = Math.max(
+        0,
+        matchOffset - contextBytes,
+    );
+
+    const contextEnd = Math.min(
+        buffer.length,
+        matchOffset +
+        searchTerm.length +
+        contextBytes,
+    );
+
+    const byteCount = contextEnd - contextStart;
+
+    console.log();
+    console.log(
+        `Context around match at 0x${matchOffset
+            .toString(16)
+            .toUpperCase()}:`,
+    );
+    console.log();
+
+    printHexDumpFromOffset(
+        buffer,
+        contextStart,
+        byteCount,
+    );
+}
+
+// Optional reverse-engineering diagnostics.
+// These are not used by the default inspector output.
 function printHexDumpFromOffset(
     buffer: Buffer,
     startOffset: number,
@@ -316,49 +210,6 @@ function printHexDumpFromOffset(
     }
 }
 
-// parses the beginning of the next section
-function parsePlayerShipStart(
-    buffer: Buffer,
-    startOffset: number,
-): ParsedPlayerShipStart {
-    let offset = startOffset;
-
-    const unknownValue1Result = readInt32(buffer, offset);
-    offset = unknownValue1Result.nextOffset;
-
-    const unknownValue2Result = readInt32(buffer, offset);
-    offset = unknownValue2Result.nextOffset;
-
-    const blueprintIdResult = readString(buffer, offset);
-    offset = blueprintIdResult.nextOffset;
-
-    const shipNameResult = readString(buffer, offset);
-    offset = shipNameResult.nextOffset;
-
-    const unknownShipIdResult = readString(buffer, offset);
-    offset = unknownShipIdResult.nextOffset;
-
-    return {
-        unknownValue1: unknownValue1Result.value,
-        unknownValue2: unknownValue2Result.value,
-        blueprintId: blueprintIdResult.value,
-        shipName: shipNameResult.value,
-        unknownShipId: unknownShipIdResult.value,
-        nextOffset: offset,
-    };
-}
-
-// display parsed objects, ship
-function printPlayerShipStart(ship: ParsedPlayerShipStart): void {
-    console.log("Player ship section:");
-    console.log(`unknownValue1: ${ship.unknownValue1}`);
-    console.log(`unknownValue2: ${ship.unknownValue2}`);
-    console.log(`blueprintId: ${ship.blueprintId}`);
-    console.log(`shipName: ${ship.shipName}`);
-    console.log(`unknownShipId: ${ship.unknownShipId}`);
-    console.log(`nextOffset: ${ship.nextOffset}`);
-}
-
 function printInt32DumpFromOffset(
     buffer: Buffer,
     startOffset: number,
@@ -392,44 +243,80 @@ function printInt32DumpFromOffset(
     }
 }
 
-function findPrintableStrings(
-    buffer: Buffer,
-    minimumLength = 4,
-): FoundString[] {
-    const results: FoundString[] = [];
-    let startOffset: number | undefined;
+// display unknown bytes for investigation
+function printHexDump(buffer: Buffer): void {
+    const bytesToRead = Math.min(buffer.length, BYTES_TO_DISPLAY);
 
-    for (let offset = 0; offset <= buffer.length; offset += 1) {
-        const byte = buffer[offset];
+    for (let offset = 0; offset < bytesToRead; offset += BYTES_PER_ROW) {
+        const row = buffer.subarray(
+            offset,
+            Math.min(offset + BYTES_PER_ROW, bytesToRead),
+        );
 
-        const isPrintable =
-            byte !== undefined &&
-            byte >= 32 &&
-            byte <= 126;
+        const offsetText = offset
+            .toString(16)
+            .padStart(8, "0")
+            .toUpperCase();
 
-        if (isPrintable && startOffset === undefined) {
-            startOffset = offset;
-        }
+        const hexText = Array.from(row)
+            .map(formatHexByte)
+            .join(" ")
+            .padEnd(BYTES_PER_ROW * 3 - 1, " ");
 
-        if (!isPrintable && startOffset !== undefined) {
-            const length = offset - startOffset;
+        const printableText = Array.from(row)
+            .map(formatPrintableByte)
+            .join("");
 
-            if (length >= minimumLength) {
-                results.push({
-                    offset: startOffset,
-                    value: buffer.toString(
-                        "utf8",
-                        startOffset,
-                        offset,
-                    ),
-                });
-            }
+        console.log(`${offsetText}  ${hexText}  |${printableText}|`);
+    }
+}
+// End of optional diagnostics
 
-            startOffset = undefined;
+// display parsed objects, ship
+function printPlayerShipStart(ship: ParsedPlayerShipStart): void {
+    console.log("Player ship section:");
+    console.log(`unknownValue1: ${ship.unknownValue1}`);
+    console.log(`unknownValue2: ${ship.unknownValue2}`);
+    console.log(`blueprintId: ${ship.blueprintId}`);
+    console.log(`shipName: ${ship.shipName}`);
+    console.log(`unknownShipId: ${ship.unknownShipId}`);
+    console.log(`nextOffset: ${ship.nextOffset}`);
+}
+
+
+function printInitialCrew(initialCrew: ParsedInitialCrew): void {
+    console.log("Initial crew:");
+
+    if (initialCrew.members.length === 0) {
+        console.log("  None");
+    } else {
+        for (const member of initialCrew.members) {
+            console.log(`  ${member.name} (${member.species})`);
         }
     }
 
-    return results;
+    console.log(`nextOffset: ${initialCrew.nextOffset}`);
+}
+
+function findPrintableStringsInRange(
+    buffer: Buffer,
+    startOffset: number,
+    byteCount: number,
+    minimumLength = 4,
+): FoundString[] {
+    const endOffset = Math.min(
+        buffer.length,
+        startOffset + byteCount,
+    );
+
+    const slice = buffer.subarray(startOffset, endOffset);
+
+    return findPrintableStrings(slice, minimumLength).map(
+        (found) => ({
+            offset: found.offset + startOffset,
+            value: found.value,
+        }),
+    );
 }
 
 function printFoundStrings(strings: FoundString[]): void {
@@ -454,34 +341,119 @@ function findStringMatches(
     );
 }
 
-interface CommandLineArguments {
-    saveFile: string | undefined;
-    searchTerm: string | undefined;
-}
+// reads the file
+// coordinates everything
+async function inspectSave(): Promise<void> {
+    const saveData = await readFile(SAVE_FILE);
+    const foundStrings = findPrintableStrings(saveData);
 
-function parseCommandLineArguments(): CommandLineArguments {
-    const userArguments = process.argv.slice(2);
+    console.log(`File: ${SAVE_FILE}`);
+    console.log(`Size: ${saveData.length} bytes`);
+    console.log(`Showing first ${Math.min(saveData.length, BYTES_TO_DISPLAY)} bytes`);
+    console.log();
 
-    let saveFile: string | undefined;
-    let searchTerm: string | undefined;
+    console.log("Parsed fields:");
+    console.log();
 
-    // parser...
+    const parsedHeader = parseSaveHeader(saveData);
+    printSaveHeader(parsedHeader);
 
-    for (let index = 0; index < userArguments.length; index++) {
-        if (userArguments[index] === "--find") {
-            searchTerm = userArguments[index + 1];
-            break;
-        }
-        else {
-            saveFile = userArguments[index]
+    console.log();
+
+    const playerShipStart = parsePlayerShipStart(
+        saveData,
+        parsedHeader.nextOffset,
+    );
+
+    printPlayerShipStart(playerShipStart);
+
+    const parsedInitialCrew = parseInitialCrew(
+        saveData,
+        playerShipStart.nextOffset,
+    );
+
+    console.log();
+    console.log("Initial Crew Info:");
+    printInitialCrew(parsedInitialCrew);
+    console.log();
+
+    console.log();
+    console.log(
+        `Unknown data beginning at ${parsedInitialCrew.nextOffset}:`,
+    );
+    console.log();
+    printHexDumpFromOffset(
+        saveData,
+        parsedInitialCrew.nextOffset,
+        1024,
+    );
+
+    const frontierStrings = findPrintableStringsInRange(
+        saveData,
+        parsedInitialCrew.nextOffset,
+        1024,
+    );
+
+    console.log();
+    console.log("Printable strings near parser frontier:");
+    console.log();
+
+    printFoundStrings(frontierStrings);
+
+    if (searchTerm) {
+        const foundStrings = findPrintableStrings(saveData);
+        const matches = findStringMatches(foundStrings, searchTerm);
+
+        console.log();
+        console.log(`String matches for "${searchTerm}":`);
+        console.log();
+
+        if (matches.length === 0) {
+            console.log("No matches found.");
+        } else {
+            printFoundStrings(matches);
+
+            if (contextBytes !== undefined) {
+                for (const match of matches) {
+                    printStringMatchContext(
+                        saveData,
+                        match,
+                        searchTerm,
+                        contextBytes,
+                    );
+                }
+            }
         }
     }
 
-    return {
-        saveFile,
-        searchTerm,
-    };
+    // console.log(`Bytes beginning at nextOffset (${playerShipStart.nextOffset}):`);
+    // console.log();
+
+    // console.log();
+    // console.log("Printable strings found in entire save:");
+    // console.log();
+
+    // printFoundStrings(foundStrings);
+
+    //     printInt32DumpFromOffset(
+    //         saveData,
+    //         playerShipStart.nextOffset,
+    //         40,
+    //     );
+
+    //     printHexDumpFromOffset(
+    //         saveData,
+    //         playerShipStart.nextOffset,
+    //         256,
+    //     );
+
+    //     console.log();
+    //     console.log("Raw hex:");
+    //     console.log();
+
+    //     printHexDump(saveData);
 }
+
 
 inspectSave().catch((error: unknown) => {
     console.error("Could not inspect the save file:", error);
