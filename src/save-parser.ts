@@ -38,20 +38,89 @@ export interface ParsedPlayerShipStart {
 }
 
 export interface CrewMember {
-  species: string;
-  name: string;
+    species: string;
+    name: string;
 }
 
 export interface ParsedInitialCrew {
-  members: CrewMember[];
-  nextOffset: number;
+    members: CrewMember[];
+    nextOffset: number;
+}
+
+export interface ParsedSectorState {
+    sectorType: string;
+    currentBeaconIndex: number;
+    sectorTypeOffset: number;
+    currentBeaconIndexOffset: number;
+}
+
+const CURRENT_BEACON_INDEX_RELATIVE_OFFSET = 0x4B;
+
+/**
+ * Provisional parser for known sector state.
+ *
+ * currentBeaconIndex was identified experimentally and is
+ * currently read at a known relative offset from the sector
+ * type string. Replace this with sequential parsing once the
+ * intervening sector fields are understood.
+ */
+
+export function parseSectorState(
+    buffer: Buffer,
+): ParsedSectorState {
+    const sectorType = "CIVILIAN_SECTOR";
+
+    const sectorTypeOffset = buffer.indexOf(
+        sectorType,
+        0,
+        "utf8",
+    );
+
+    if (sectorTypeOffset === -1) {
+        throw new Error(
+            `Could not find sector identifier: ${sectorType}`,
+        );
+    }
+
+    const currentBeaconIndexOffset =
+        sectorTypeOffset +
+        CURRENT_BEACON_INDEX_RELATIVE_OFFSET;
+
+    if (currentBeaconIndexOffset + 4 > buffer.length) {
+        throw new Error(
+            "Current beacon index would be outside the save file.",
+        );
+    }
+
+    const currentBeaconIndexResult = readInt32(
+        buffer,
+        currentBeaconIndexOffset,
+    );
+
+    if (
+        currentBeaconIndexResult.value < 0 ||
+        currentBeaconIndexResult.value > 1000
+    ) {
+        throw new Error(
+            `Parsed an implausible current beacon index: ` +
+            `${currentBeaconIndexResult.value}`,
+        );
+    }
+
+    return {
+        sectorType,
+        currentBeaconIndex:
+            currentBeaconIndexResult.value,
+        sectorTypeOffset,
+        currentBeaconIndexOffset,
+    };
 }
 
 // decode individual binary values
 export function readString(
     buffer: Buffer,
     offset: number,
-): { value: string; nextOffset: number } {
+): ParsedString {
     const length = buffer.readInt32LE(offset);
     const stringStart = offset + 4;
     const stringEnd = stringStart + length;
@@ -66,7 +135,7 @@ export function readString(
 export function readInt32(
     buffer: Buffer,
     offset: number,
-): { value: number; nextOffset: number } {
+): ParsedInteger {
     return {
         value: buffer.readInt32LE(offset),
         nextOffset: offset + 4,
@@ -177,36 +246,36 @@ export function parsePlayerShipStart(
 }
 
 export function parseInitialCrew(
-  buffer: Buffer,
-  startOffset: number,
+    buffer: Buffer,
+    startOffset: number,
 ): ParsedInitialCrew {
-  let offset = startOffset;
+    let offset = startOffset;
 
-  const crewCountResult = readInt32(buffer, offset);
-  offset = crewCountResult.nextOffset;
+    const crewCountResult = readInt32(buffer, offset);
+    offset = crewCountResult.nextOffset;
 
-  const members: CrewMember[] = [];
+    const members: CrewMember[] = [];
 
-  for (
-    let index = 0;
-    index < crewCountResult.value;
-    index += 1
-  ) {
-    const speciesResult = readString(buffer, offset);
-    offset = speciesResult.nextOffset;
+    for (
+        let index = 0;
+        index < crewCountResult.value;
+        index += 1
+    ) {
+        const speciesResult = readString(buffer, offset);
+        offset = speciesResult.nextOffset;
 
-    const nameResult = readString(buffer, offset);
-    offset = nameResult.nextOffset;
+        const nameResult = readString(buffer, offset);
+        offset = nameResult.nextOffset;
 
-    members.push({
-      species: speciesResult.value,
-      name: nameResult.value,
-    });
-  }
+        members.push({
+            species: speciesResult.value,
+            name: nameResult.value,
+        });
+    }
 
-  return {
-    members,
-    nextOffset: offset,
-  };
+    return {
+        members,
+        nextOffset: offset,
+    };
 }
 

@@ -16,10 +16,61 @@ import type {
 
 
 const BEFORE_FILE =
-    String.raw`C:\Code\ftl-journal\ftl-save-archive\session-2026-08-04T00-27-09-992Z\snapshot-0004.sav`;
+    String.raw`C:\Code\ftl-journal\ftl-save-archive\session-2026-08-05T01-04-12-192Z\snapshot-0002.sav`;
 
 const AFTER_FILE =
-    String.raw`C:\Code\ftl-journal\ftl-save-archive\session-2026-08-04T00-27-09-992Z\snapshot-0005.sav`;
+    String.raw`C:\Code\ftl-journal\ftl-save-archive\session-2026-08-05T01-04-12-192Z\snapshot-0003.sav`;
+
+export interface ChangedByteRange {
+    startOffset: number;
+    endOffset: number;
+    length: number;
+}
+
+export function findChangedByteRanges(
+    before: Buffer,
+    after: Buffer,
+): ChangedByteRange[] {
+    const ranges: ChangedByteRange[] = [];
+    const comparableLength = Math.min(
+        before.length,
+        after.length,
+    );
+
+    let rangeStart: number | undefined;
+
+    for (
+        let offset = 0;
+        offset < comparableLength;
+        offset += 1
+    ) {
+        const changed = before[offset] !== after[offset];
+
+        if (changed && rangeStart === undefined) {
+            rangeStart = offset;
+        }
+
+        if (!changed && rangeStart !== undefined) {
+            ranges.push({
+                startOffset: rangeStart,
+                endOffset: offset - 1,
+                length: offset - rangeStart,
+            });
+
+            rangeStart = undefined;
+        }
+    }
+
+    if (rangeStart !== undefined) {
+        ranges.push({
+            startOffset: rangeStart,
+            endOffset: comparableLength - 1,
+            length: comparableLength - rangeStart,
+        });
+    }
+
+    return ranges;
+}
 
 async function compareSaves(): Promise<void> {
     const beforeData = await readFile(BEFORE_FILE);
@@ -123,6 +174,28 @@ async function compareSaves(): Promise<void> {
         }
 
         console.log();
+    }
+
+    const changedByteRanges = findChangedByteRanges(
+        beforeData,
+        afterData,
+    );
+
+    console.log();
+    console.log("Changed byte ranges:");
+
+    for (const range of changedByteRanges) {
+        console.log(
+            `  0x${range.startOffset
+                .toString(16)
+                .toUpperCase()
+                .padStart(8, "0")}` +
+            ` - 0x${range.endOffset
+                .toString(16)
+                .toUpperCase()
+                .padStart(8, "0")}` +
+            `  (${range.length} bytes)`,
+        );
     }
 
     if (!foundDifference) {

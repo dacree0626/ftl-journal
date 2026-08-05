@@ -4,12 +4,14 @@ import {
     parseInitialCrew,
     parsePlayerShipStart,
     parseSaveHeader,
+    parseSectorState
 } from "./save-parser.js";
 
 import type {
     ParsedInitialCrew,
     ParsedPlayerShipStart,
     ParsedSaveHeader,
+    ParsedSectorState,
 } from "./save-parser.js";
 
 import {
@@ -31,6 +33,9 @@ const SAVE_FILE =
     getRequiredEnvironmentVariable("SAVE_FILE");
 
 const searchTerm = commandLineArguments.searchTerm;
+const requestedOffset = commandLineArguments.offset;
+const requestedLength = commandLineArguments.length;
+const int32SearchValue = commandLineArguments.int32SearchValue;
 
 const contextBytes =
     commandLineArguments.contextBytes;
@@ -49,6 +54,9 @@ interface CommandLineArguments {
     saveFile: string | undefined;
     searchTerm: string | undefined;
     contextBytes: number | undefined;
+    offset: number | undefined;
+    length: number | undefined;
+    int32SearchValue: number | undefined;
 }
 
 function parseCommandLineArguments(): CommandLineArguments {
@@ -57,28 +65,107 @@ function parseCommandLineArguments(): CommandLineArguments {
     let saveFile: string | undefined;
     let searchTerm: string | undefined;
     let contextBytes: number | undefined;
+    let offset: number | undefined;
+    let length: number | undefined;
+    let int32SearchValue: number | undefined;
 
-    for (let index = 0; index < userArguments.length; index++) {
+    for (
+        let index = 0;
+        index < userArguments.length;
+        index += 1
+    ) {
         const argument = userArguments[index];
 
+        if (argument === undefined) {
+            continue;
+        }
+
         if (argument === "--find") {
-            searchTerm = userArguments[index + 1];
+            const value = userArguments[index + 1];
+
+            if (value === undefined || value.startsWith("--")) {
+                throw new Error("--find requires a search term.");
+            }
+
+            searchTerm = value;
             index += 1;
             continue;
         }
 
         if (argument === "--context") {
-            const nextArgument = userArguments[index + 1];
+            const value = userArguments[index + 1];
 
-            if (nextArgument) {
-                contextBytes = Number.parseInt(
-                    nextArgument,
-                    10
-                );
+            if (value === undefined || value.startsWith("--")) {
+                throw new Error("--context requires a value.");
             }
+
+            contextBytes = parseNumericArgument(
+                value,
+                "--context",
+            );
 
             index += 1;
             continue;
+        }
+
+        if (argument === "--offset") {
+            const value = userArguments[index + 1];
+
+            if (value === undefined || value.startsWith("--")) {
+                throw new Error("--offset requires a value.");
+            }
+
+            offset = parseNumericArgument(
+                value,
+                "--offset",
+            );
+
+            index += 1;
+            continue;
+        }
+
+        if (argument === "--length") {
+            const value = userArguments[index + 1];
+
+            if (value === undefined || value.startsWith("--")) {
+                throw new Error("--length requires a value.");
+            }
+
+            length = parseNumericArgument(
+                value,
+                "--length",
+            );
+
+            index += 1;
+            continue;
+        }
+
+        if (argument === "--find-int32") {
+            const value = userArguments[index + 1];
+
+            if (value === undefined || value.startsWith("--")) {
+                throw new Error("--find-int32 requires a value.");
+            }
+
+            int32SearchValue = parseNumericArgument(
+                value,
+                "--find-int32",
+            );
+
+            index += 1;
+            continue;
+        }
+
+        if (argument.startsWith("--")) {
+            throw new Error(
+                `Unknown inspect-save argument: ${argument}`,
+            );
+        }
+
+        if (saveFile !== undefined) {
+            throw new Error(
+                `Unexpected positional argument: ${argument}`,
+            );
         }
 
         saveFile = argument;
@@ -87,9 +174,40 @@ function parseCommandLineArguments(): CommandLineArguments {
     return {
         saveFile,
         searchTerm,
-        contextBytes
+        contextBytes,
+        offset,
+        length,
+        int32SearchValue,
     };
 }
+
+function parseNumericArgument(
+    value: string,
+    argumentName: string,
+): number {
+    const radix = value.toLowerCase().startsWith("0x")
+        ? 16
+        : 10;
+
+    const normalizedValue =
+        radix === 16
+            ? value.slice(2)
+            : value;
+
+    const parsedValue = Number.parseInt(
+        normalizedValue,
+        radix,
+    );
+
+    if (Number.isNaN(parsedValue) || parsedValue < 0) {
+        throw new Error(
+            `${argumentName} requires a non-negative number.`,
+        );
+    }
+
+    return parsedValue;
+}
+
 function getRequiredEnvironmentVariable(name: string): string {
     const value = process.env[name];
 
@@ -341,6 +459,67 @@ function findStringMatches(
     );
 }
 
+function findInt32Matches(
+    buffer: Buffer,
+    searchValue: number,
+    startOffset = 0,
+    length = buffer.length - startOffset,
+): number[] {
+    const matches: number[] = [];
+
+    const endOffset = Math.min(
+        startOffset + length,
+        buffer.length,
+    );
+
+    for (
+        let offset = startOffset;
+        offset <= endOffset - 4;
+        offset += 1
+    ) {
+        const value = buffer.readInt32LE(offset);
+
+        if (value === searchValue) {
+            matches.push(offset);
+        }
+    }
+
+    return matches;
+}
+
+function printInt32Matches(
+    buffer: Buffer,
+    searchValue: number,
+    startOffset: number,
+    length: number,
+): void {
+    const matches = findInt32Matches(
+        buffer,
+        searchValue,
+        startOffset,
+        length,
+    );
+
+    console.log();
+    console.log(
+        `Int32 matches for ${searchValue}:`,
+    );
+
+    if (matches.length === 0) {
+        console.log("No matches found.");
+        return;
+    }
+
+    for (const matchOffset of matches) {
+        console.log(
+            `  0x${matchOffset
+                .toString(16)
+                .toUpperCase()
+                .padStart(8, "0")}`,
+        );
+    }
+}
+
 // reads the file
 // coordinates everything
 async function inspectSave(): Promise<void> {
@@ -348,57 +527,57 @@ async function inspectSave(): Promise<void> {
     const foundStrings = findPrintableStrings(saveData);
 
     console.log(`File: ${SAVE_FILE}`);
-    console.log(`Size: ${saveData.length} bytes`);
-    console.log(`Showing first ${Math.min(saveData.length, BYTES_TO_DISPLAY)} bytes`);
-    console.log();
+    // console.log(`Size: ${saveData.length} bytes`);
+    // console.log(`Showing first ${Math.min(saveData.length, BYTES_TO_DISPLAY)} bytes`);
+    // console.log();
 
-    console.log("Parsed fields:");
-    console.log();
+    // console.log("Parsed fields:");
+    // console.log();
 
-    const parsedHeader = parseSaveHeader(saveData);
-    printSaveHeader(parsedHeader);
+    // const parsedHeader = parseSaveHeader(saveData);
+    // printSaveHeader(parsedHeader);
 
-    console.log();
+    // console.log();
 
-    const playerShipStart = parsePlayerShipStart(
-        saveData,
-        parsedHeader.nextOffset,
-    );
+    // const playerShipStart = parsePlayerShipStart(
+    //     saveData,
+    //     parsedHeader.nextOffset,
+    // );
 
-    printPlayerShipStart(playerShipStart);
+    // printPlayerShipStart(playerShipStart);
 
-    const parsedInitialCrew = parseInitialCrew(
-        saveData,
-        playerShipStart.nextOffset,
-    );
+    // const parsedInitialCrew = parseInitialCrew(
+    //     saveData,
+    //     playerShipStart.nextOffset,
+    // );
 
-    console.log();
-    console.log("Initial Crew Info:");
-    printInitialCrew(parsedInitialCrew);
-    console.log();
+    // console.log();
+    // console.log("Initial Crew Info:");
+    // printInitialCrew(parsedInitialCrew);
+    // console.log();
 
-    console.log();
-    console.log(
-        `Unknown data beginning at ${parsedInitialCrew.nextOffset}:`,
-    );
-    console.log();
-    printHexDumpFromOffset(
-        saveData,
-        parsedInitialCrew.nextOffset,
-        1024,
-    );
+    // console.log();
+    // console.log(
+    //     `Unknown data beginning at ${parsedInitialCrew.nextOffset}:`,
+    // );
+    // console.log();
+    // printHexDumpFromOffset(
+    //     saveData,
+    //     parsedInitialCrew.nextOffset,
+    //     1024,
+    // );
 
-    const frontierStrings = findPrintableStringsInRange(
-        saveData,
-        parsedInitialCrew.nextOffset,
-        1024,
-    );
+    // const frontierStrings = findPrintableStringsInRange(
+    //     saveData,
+    //     parsedInitialCrew.nextOffset,
+    //     1024,
+    // );
 
-    console.log();
-    console.log("Printable strings near parser frontier:");
-    console.log();
+    // console.log();
+    // console.log("Printable strings near parser frontier:");
+    // console.log();
 
-    printFoundStrings(frontierStrings);
+    // printFoundStrings(frontierStrings);
 
     if (searchTerm) {
         const foundStrings = findPrintableStrings(saveData);
@@ -425,6 +604,53 @@ async function inspectSave(): Promise<void> {
             }
         }
     }
+
+    if (requestedOffset !== undefined) {
+        const lengthToDisplay =
+            requestedLength ?? BYTES_TO_DISPLAY;
+
+        console.log();
+        printHexDumpFromOffset(
+            saveData,
+            requestedOffset,
+            lengthToDisplay,
+        );
+    }
+
+    if (int32SearchValue !== undefined && requestedOffset) {
+        const lengthToDisplay =
+            requestedLength ?? BYTES_TO_DISPLAY;
+        findInt32Matches(
+            saveData,
+            int32SearchValue,
+        );
+        console.log();
+        printInt32Matches(
+            saveData,
+            int32SearchValue,
+            requestedOffset,
+            lengthToDisplay
+        )
+    }
+
+    const sectorState = parseSectorState(saveData);
+
+    console.log();
+    console.log("Sector state:");
+    console.log(`sectorType: ${sectorState.sectorType}`);
+    console.log(
+        `currentBeaconIndex: ${sectorState.currentBeaconIndex}`,
+    );
+    console.log(
+        `sectorTypeOffset: 0x${sectorState.sectorTypeOffset
+            .toString(16)
+            .toUpperCase()}`,
+    );
+    console.log(
+        `currentBeaconIndexOffset: 0x${sectorState.currentBeaconIndexOffset
+            .toString(16)
+            .toUpperCase()}`,
+    );
 
     // console.log(`Bytes beginning at nextOffset (${playerShipStart.nextOffset}):`);
     // console.log();

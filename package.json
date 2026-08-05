@@ -6,7 +6,8 @@
   "scripts": {
     "watch": "tsx src/watch-save.ts",
     "inspect": "tsx src/inspect-save.ts",
-    "compare": "tsx src/compare-save.ts"
+    "compare": "tsx src/compare-save.ts",
+    "lookup": "tsx src/lookup-event.ts"
   },
   "keywords": [],
   "author": "",
