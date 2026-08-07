@@ -4,6 +4,7 @@ import path from "node:path";
 export interface XmlTextMatch {
     searchText: string;
     xmlFile: string;
+    occurrenceIndex: number;
 }
 
 
@@ -43,11 +44,26 @@ export async function findXmlFilesContainingText(
     for (const xmlFile of xmlFiles) {
         const contents = await readFile(xmlFile, "utf8");
 
-        if (contents.includes(searchText)) {
+        let searchFrom = 0;
+
+        while (true) {
+            const occurrenceIndex = contents.indexOf(
+                searchText,
+                searchFrom,
+            );
+
+            if (occurrenceIndex === -1) {
+                break;
+            }
+
             matches.push({
                 searchText,
                 xmlFile,
+                occurrenceIndex,
             });
+
+            searchFrom =
+                occurrenceIndex + searchText.length;
         }
     }
 
