@@ -16,10 +16,10 @@ import type {
 
 
 const BEFORE_FILE =
-    String.raw`C:\Code\ftl-journal\ftl-save-archive\session-2026-08-05T01-04-12-192Z\snapshot-0002.sav`;
+    String.raw`C:\Code\ftl-journal\ftl-save-archive\session-2026-08-05T23-33-02-113Z\snapshot-0001.sav`;
 
 const AFTER_FILE =
-    String.raw`C:\Code\ftl-journal\ftl-save-archive\session-2026-08-05T01-04-12-192Z\snapshot-0003.sav`;
+    String.raw`C:\Code\ftl-journal\ftl-save-archive\session-2026-08-05T23-33-02-113Z\snapshot-0002.sav`;
 
 export interface ChangedByteRange {
     startOffset: number;
@@ -181,22 +181,22 @@ async function compareSaves(): Promise<void> {
         afterData,
     );
 
-    console.log();
-    console.log("Changed byte ranges:");
+    // console.log();
+    // console.log("Changed byte ranges:");
 
-    for (const range of changedByteRanges) {
-        console.log(
-            `  0x${range.startOffset
-                .toString(16)
-                .toUpperCase()
-                .padStart(8, "0")}` +
-            ` - 0x${range.endOffset
-                .toString(16)
-                .toUpperCase()
-                .padStart(8, "0")}` +
-            `  (${range.length} bytes)`,
-        );
-    }
+    // for (const range of changedByteRanges) {
+    //     console.log(
+    //         `  0x${range.startOffset
+    //             .toString(16)
+    //             .toUpperCase()
+    //             .padStart(8, "0")}` +
+    //         ` - 0x${range.endOffset
+    //             .toString(16)
+    //             .toUpperCase()
+    //             .padStart(8, "0")}` +
+    //         `  (${range.length} bytes)`,
+    //     );
+    // }
 
     if (!foundDifference) {
         console.log("No differences found in the parsed fields.");

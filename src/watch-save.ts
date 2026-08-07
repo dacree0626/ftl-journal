@@ -9,6 +9,9 @@ import { watch } from "node:fs";
 import { copyFile, mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import "dotenv/config";
+import {
+    processSnapshot
+} from "./process-snapshot.js"
 
 
 function getRequiredEnvironmentVariable(name: string): string {
@@ -102,34 +105,49 @@ async function archiveSave(
         snapshotNumber += 1;
 
         const extension = path.extname(SAVE_FILE);
-        const paddedSnapshotNumber = String(snapshotNumber).padStart(4, "0");
+        const paddedSnapshotNumber =
+            String(snapshotNumber).padStart(4, "0");
 
-        const snapshotName = `snapshot-${paddedSnapshotNumber}${extension}`;
-        const metadataName = `snapshot-${paddedSnapshotNumber}.json`;
+        const snapshotName =
+            `snapshot-${paddedSnapshotNumber}${extension}`;
 
-        const metadataPath = path.join(SESSION_DIRECTORY, metadataName);
-        const archivePath = path.join(SESSION_DIRECTORY, snapshotName);
-        const capturedAt = new Date();
-
-        await copyFile(SAVE_FILE, archivePath);
-        const metadata = createSnapshotMetadata(
-            trigger,
-            capturedAt,
-            saveStats.mtime,
-            saveStats.size,
+        const archivePath = path.join(
+            SESSION_DIRECTORY,
             snapshotName,
         );
 
-        await writeSnapshotMetadata(metadata, metadataPath);
+        const capturedAt = new Date();
+
+        await copyFile(
+            SAVE_FILE,
+            archivePath,
+        );
+
+        await processSnapshot(
+            archivePath,
+            {
+                trigger,
+                capturedAt,
+                sourceModifiedAt: saveStats.mtime,
+                sourceSize: saveStats.size,
+            },
+        );
 
         console.log(
-            `Saved snapshot ${snapshotNumber} at ${new Date().toLocaleTimeString()}`,
+            `Saved snapshot ${snapshotNumber} at ` +
+            `${new Date().toLocaleTimeString()}`,
         );
-        console.log(`File modified: ${saveStats.mtime.toLocaleTimeString()}`);
+        console.log(
+            `File modified: ` +
+            `${saveStats.mtime.toLocaleTimeString()}`,
+        );
         console.log(archivePath);
         console.log();
     } catch (error) {
-        console.error("Could not archive the save file:", error);
+        console.error(
+            "Could not archive the save file:",
+            error,
+        );
     }
 }
 

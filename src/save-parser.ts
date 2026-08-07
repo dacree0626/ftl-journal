@@ -54,14 +54,26 @@ export interface ParsedSectorState {
     currentBeaconIndexOffset: number;
 }
 
+export interface DialogueCandidateContext {
+    crewNames: string[];
+    shipName: string;
+    shipBlueprintId: string;
+}
+
 const CURRENT_BEACON_INDEX_RELATIVE_OFFSET = 0x4B;
 
 /**
- * Provisional parser for known sector state.
+ * Index identifying the player's current beacon within the
+ * procedurally generated sector data.
  *
- * currentBeaconIndex was identified experimentally and is
- * currently read at a known relative offset from the sector
- * type string. Replace this with sequential parsing once the
+ * Inferred experimentally:
+ * - remains stable while resolving events at the same beacon
+ * - changes when the player jumps
+ * - is not a visit counter
+ * - the starting beacon is not guaranteed to have index 0
+ *
+ * This is currently read at a known relative offset from the
+ * sector type string. Replace with sequential parsing once the
  * intervening sector fields are understood.
  */
 
@@ -279,3 +291,52 @@ export function parseInitialCrew(
     };
 }
 
+
+export function findDialogueCandidates(
+    strings: string[],
+    context: DialogueCandidateContext,
+): string[] {
+    return strings.filter((value) =>
+        isDialogueCandidate(value, context),
+    );
+}
+
+export function isDialogueCandidate(
+    value: string,
+    context: DialogueCandidateContext,
+): boolean {
+    const trimmed = value.trim();
+
+    if (trimmed.length < 15) {
+        return false;
+    }
+
+    if (!trimmed.includes(" ")) {
+        return false;
+    }
+
+    if (context.crewNames.includes(trimmed)) {
+        return false;
+    }
+
+    if (trimmed === context.shipName) {
+        return false;
+    }
+
+    if (trimmed === context.shipBlueprintId) {
+        return false;
+    }
+
+    if (/^[A-Z0-9_]+$/.test(trimmed)) {
+        return false;
+    }
+
+    if (
+        trimmed.includes("\\") ||
+        /\.(xml|png|jpg|ogg|wav)$/i.test(trimmed)
+    ) {
+        return false;
+    }
+
+    return true;
+}
