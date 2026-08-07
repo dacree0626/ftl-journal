@@ -3,6 +3,10 @@ import "dotenv/config";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
+import{
+    findXmlFiles
+} from "./xml-search.js"
+
 interface CommandLineArguments {
     searchText: string | undefined;
     fileName: string | undefined;
@@ -73,34 +77,6 @@ function parseCommandLineArguments(): CommandLineArguments {
         fileName,
     };
 }
-
-async function findXmlFiles(directory: string): Promise<string[]> {
-    const entries = await readdir(directory, {
-        withFileTypes: true,
-    });
-
-    const files: string[] = [];
-
-    for (const entry of entries) {
-        const entryPath = path.join(directory, entry.name);
-
-        if (entry.isDirectory()) {
-            const nestedFiles = await findXmlFiles(entryPath);
-            files.push(...nestedFiles);
-            continue;
-        }
-
-        if (
-            entry.name.endsWith(".xml") ||
-            entry.name.endsWith(".xml.append")
-        ) {
-            files.push(entryPath);
-        }
-    }
-
-    return files;
-}
-
 
 async function lookupEvent(): Promise<void> {
     if (!searchText) {

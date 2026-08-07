@@ -24,6 +24,15 @@ import type {
     FoundString
 } from "./save-analysis.js";
 
+import {
+    findXmlFilesContainingText,
+    findXmlFiles
+} from "./xml-search.js"
+
+import type {
+    XmlTextMatch
+} from "./xml-search.js";
+
 export type SnapshotTrigger =
     | "session-start"
     | "filesystem-change"
@@ -37,7 +46,7 @@ export interface SnapshotMetadata {
     sourceSize: number;
     jumpCount: number;
     currentBeaconIndex: number;
-    dialogueCandidates: string[];
+    dialogueInXml: XmlTextMatch[];
 }
 
 
@@ -46,6 +55,16 @@ export interface SnapshotCaptureDetails {
     capturedAt: Date;
     sourceModifiedAt: Date;
     sourceSize: number;
+}
+
+function getRequiredEnvironmentVariable(name: string): string {
+    const value = process.env[name];
+
+    if (!value) {
+        throw new Error(`${name} is not configured in the .env file.`);
+    }
+
+    return value;
 }
 
 export async function processSnapshot(
@@ -87,18 +106,37 @@ export async function processSnapshot(
         dialogueContext,
     );
 
+    const multiverseDataDirectory =
+        getRequiredEnvironmentVariable(
+            "MULTIVERSE_DATA_DIRECTORY",
+        );
+
+    const xmlFiles = await findXmlFiles(
+        multiverseDataDirectory,
+    );
+
+    const dialogueInXml: XmlTextMatch[] = [];
+
+    for (const dialogueCandidate of dialogueCandidates) {
+        const matches = await findXmlFilesContainingText(
+            xmlFiles,
+            dialogueCandidate,
+        );
+
+        dialogueInXml.push(...matches);
+    }
+
     const metadata: SnapshotMetadata = {
         snapshotFile: basename(saveFile),
         trigger: captureDetails.trigger,
-        capturedAt:
-            captureDetails.capturedAt.toISOString(),
+        capturedAt: captureDetails.capturedAt.toISOString(),
         sourceModifiedAt:
             captureDetails.sourceModifiedAt.toISOString(),
         sourceSize: captureDetails.sourceSize,
         jumpCount,
         currentBeaconIndex:
             sectorState.currentBeaconIndex,
-        dialogueCandidates: dialogueCandidates
+        dialogueInXml
     };
 
     const sidecarFile = join(
