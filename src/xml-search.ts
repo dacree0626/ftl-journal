@@ -1,10 +1,22 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { XMLParser } from "fast-xml-parser";
 
 export interface XmlTextMatch {
     searchText: string;
     xmlFile: string;
     occurrenceIndex: number;
+}
+
+export interface XmlEventMatch {
+    searchText: string;
+    xmlFile: string;
+    eventName: string;
+}
+
+interface ParsedXmlEvent {
+    text?: string;
+    "@_name"?: string;
 }
 
 
@@ -68,4 +80,103 @@ export async function findXmlFilesContainingText(
     }
 
     return matches;
+}
+
+export async function findEventsContainingText(
+    xmlFile: string,
+    searchText: string,
+): Promise<XmlEventMatch[]> {
+    console.log("ENTERED findEventsContainingText");
+    console.log("xmlFile:", xmlFile);
+    console.log("searchText:", searchText);
+    // read file
+    const xml = await readFile(xmlFile, "utf8");
+    // parse XML
+    const parser = new XMLParser({
+        ignoreAttributes: false,
+    });
+    const parsedXml = parser.parse(xml);
+    // inspect events
+    const events = findAllEvents(parsedXml.FTL);
+
+    console.log("Events found:", events.length);
+
+    const eventsContainingSearchText = events.filter((event) =>
+        JSON.stringify(event).includes(searchText)
+    );
+
+    console.dir(eventsContainingSearchText, {
+        depth: null,
+    });
+
+    const matches: XmlEventMatch[] = [];
+
+    for (const event of events) {
+        if (
+            event.text === searchText &&
+            event["@_name"]
+        ) {
+            matches.push({
+                searchText,
+                xmlFile,
+                eventName: event["@_name"],
+            });
+        }
+    }
+
+
+    // return matching event names
+    return matches;
+
+}
+
+function findAllEvents(
+    node: unknown,
+    events: ParsedXmlEvent[] = [],
+): ParsedXmlEvent[] {
+    if (Array.isArray(node)) {
+        for (const item of node) {
+            findAllEvents(item, events);
+        }
+
+        return events;
+    }
+
+    if (
+        typeof node !== "object" ||
+        node === null
+    ) {
+        return events;
+    }
+
+    const objectNode =
+        node as Record<string, unknown>;
+
+    for (const [key, value] of Object.entries(objectNode)) {
+        if (key === "event") {
+            if (Array.isArray(value)) {
+                for (const event of value) {
+                    if (
+                        typeof event === "object" &&
+                        event !== null
+                    ) {
+                        events.push(
+                            event as ParsedXmlEvent
+                        );
+                    }
+                }
+            } else if (
+                typeof value === "object" &&
+                value !== null
+            ) {
+                events.push(
+                    value as ParsedXmlEvent
+                );
+            }
+        }
+
+        findAllEvents(value, events);
+    }
+
+    return events;
 }

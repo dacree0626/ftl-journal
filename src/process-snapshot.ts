@@ -26,11 +26,13 @@ import type {
 
 import {
     findXmlFilesContainingText,
-    findXmlFiles
+    findXmlFiles,
+    findEventsContainingText
 } from "./xml-search.js"
 
 import type {
-    XmlTextMatch
+    XmlTextMatch,
+    XmlEventMatch
 } from "./xml-search.js";
 
 export type SnapshotTrigger =
@@ -46,7 +48,9 @@ export interface SnapshotMetadata {
     sourceSize: number;
     jumpCount: number;
     currentBeaconIndex: number;
+    dialogueCandidates: string[];
     dialogueInXml: XmlTextMatch[];
+    xmlEvents: XmlEventMatch[]
 }
 
 
@@ -126,6 +130,16 @@ export async function processSnapshot(
         dialogueInXml.push(...matches);
     }
 
+    const xmlEvents: XmlEventMatch[] = [];
+
+    for(const xmlMatch of dialogueInXml) {
+        const eventMatch = await findEventsContainingText(
+            xmlMatch.xmlFile,
+            xmlMatch.searchText
+        )
+        xmlEvents.push(...eventMatch)
+    }
+
     const metadata: SnapshotMetadata = {
         snapshotFile: basename(saveFile),
         trigger: captureDetails.trigger,
@@ -136,7 +150,9 @@ export async function processSnapshot(
         jumpCount,
         currentBeaconIndex:
             sectorState.currentBeaconIndex,
-        dialogueInXml
+        dialogueCandidates,
+        dialogueInXml,
+        xmlEvents
     };
 
     const sidecarFile = join(

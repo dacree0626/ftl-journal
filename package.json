@@ -20,6 +20,7 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "dotenv": "^17.4.2"
+    "dotenv": "^17.4.2",
+    "fast-xml-parser": "^5.10.1"
   }
 }
