@@ -77,37 +77,96 @@ const CURRENT_BEACON_INDEX_RELATIVE_OFFSET = 0x4B;
  * intervening sector fields are understood.
  */
 
+const FLAGSHIP_MARKER = "flagship";
+
+function readLengthPrefixedString(
+    buffer: Buffer,
+    offset: number,
+): {
+    value: string;
+    nextOffset: number;
+} {
+    const lengthResult = readInt32(
+        buffer,
+        offset,
+    );
+
+    const stringLength = lengthResult.value;
+
+    if (
+        stringLength < 0 ||
+        lengthResult.nextOffset + stringLength > buffer.length
+    ) {
+        throw new Error(
+            `Invalid string length: ${stringLength}`,
+        );
+    }
+
+    const value = buffer.toString(
+        "utf8",
+        lengthResult.nextOffset,
+        lengthResult.nextOffset + stringLength,
+    );
+
+    return {
+        value,
+        nextOffset:
+            lengthResult.nextOffset + stringLength,
+    };
+}
+
 export function parseSectorState(
     buffer: Buffer,
 ): ParsedSectorState {
-    const sectorType = "CIVILIAN_SECTOR";
-
-    const sectorTypeOffset = buffer.indexOf(
-        sectorType,
+    const flagshipOffset = buffer.indexOf(
+        FLAGSHIP_MARKER,
         0,
         "utf8",
     );
 
-    if (sectorTypeOffset === -1) {
+    if (flagshipOffset === -1) {
         throw new Error(
-            `Could not find sector identifier: ${sectorType}`,
+            `Could not find sector-state marker: ${FLAGSHIP_MARKER}`,
         );
     }
+
+    const sectorLengthOffset =
+        flagshipOffset +
+        Buffer.byteLength(
+            FLAGSHIP_MARKER,
+            "utf8",
+        );
+
+    const sectorResult =
+        readLengthPrefixedString(
+            buffer,
+            sectorLengthOffset,
+        );
+
+    const sectorType =
+        sectorResult.value;
+
+    const sectorTypeOffset =
+        sectorLengthOffset + 4;
 
     const currentBeaconIndexOffset =
         sectorTypeOffset +
         CURRENT_BEACON_INDEX_RELATIVE_OFFSET;
 
-    if (currentBeaconIndexOffset + 4 > buffer.length) {
+    if (
+        currentBeaconIndexOffset + 4 >
+        buffer.length
+    ) {
         throw new Error(
             "Current beacon index would be outside the save file.",
         );
     }
 
-    const currentBeaconIndexResult = readInt32(
-        buffer,
-        currentBeaconIndexOffset,
-    );
+    const currentBeaconIndexResult =
+        readInt32(
+            buffer,
+            currentBeaconIndexOffset,
+        );
 
     if (
         currentBeaconIndexResult.value < 0 ||

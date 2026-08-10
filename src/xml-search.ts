@@ -86,48 +86,90 @@ export async function findEventsContainingText(
     xmlFile: string,
     searchText: string,
 ): Promise<XmlEventMatch[]> {
-    console.log("ENTERED findEventsContainingText");
-    console.log("xmlFile:", xmlFile);
-    console.log("searchText:", searchText);
-    // read file
     const xml = await readFile(xmlFile, "utf8");
-    // parse XML
+
     const parser = new XMLParser({
         ignoreAttributes: false,
     });
+
     const parsedXml = parser.parse(xml);
-    // inspect events
-    const events = findAllEvents(parsedXml.FTL);
 
-    console.log("Events found:", events.length);
-
-    const eventsContainingSearchText = events.filter((event) =>
-        JSON.stringify(event).includes(searchText)
-    );
-
-    console.dir(eventsContainingSearchText, {
-        depth: null,
-    });
+    const eventNames =
+        findNamedEventsContainingText(
+            parsedXml.FTL,
+            searchText,
+        );
 
     const matches: XmlEventMatch[] = [];
 
-    for (const event of events) {
-        if (
-            event.text === searchText &&
-            event["@_name"]
-        ) {
-            matches.push({
-                searchText,
-                xmlFile,
-                eventName: event["@_name"],
-            });
-        }
+    for (const eventName of eventNames) {
+        matches.push({
+            searchText,
+            xmlFile,
+            eventName,
+        });
     }
 
-
-    // return matching event names
     return matches;
+}
 
+function findNamedEventsContainingText(
+    node: unknown,
+    searchText: string,
+    currentEventName?: string,
+): string[] {
+    const matches: string[] = [];
+
+    if (Array.isArray(node)) {
+        for (const item of node) {
+            matches.push(
+                ...findNamedEventsContainingText(
+                    item,
+                    searchText,
+                    currentEventName,
+                ),
+            );
+        }
+
+        return matches;
+    }
+
+    if (
+        typeof node !== "object" ||
+        node === null
+    ) {
+        return matches;
+    }
+
+    const objectNode =
+        node as Record<string, unknown>;
+
+    let eventName = currentEventName;
+
+    if (
+        typeof objectNode["@_name"] === "string"
+    ) {
+        eventName = objectNode["@_name"];
+    }
+
+    if (
+        objectNode.text === searchText &&
+        eventName
+    ) {
+        matches.push(eventName);
+    }
+
+    for (const value of Object.values(objectNode)) {
+        matches.push(
+            ...findNamedEventsContainingText(
+                value,
+                searchText,
+                eventName,
+            ),
+        );
+    }
+
+    return matches;
 }
 
 function findAllEvents(
