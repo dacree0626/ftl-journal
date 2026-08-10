@@ -47,6 +47,7 @@ export interface SnapshotMetadata {
     sourceModifiedAt: string;
     sourceSize: number;
     jumpCount: number;
+    sectorType: string;
     currentBeaconIndex: number;
     dialogueCandidates: string[];
     dialogueInXml: XmlTextMatch[];
@@ -148,6 +149,7 @@ export async function processSnapshot(
             captureDetails.sourceModifiedAt.toISOString(),
         sourceSize: captureDetails.sourceSize,
         jumpCount,
+        sectorType: sectorState.sectorType,
         currentBeaconIndex:
             sectorState.currentBeaconIndex,
         dialogueCandidates,
