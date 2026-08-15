@@ -19,6 +19,8 @@ interface ParsedXmlEvent {
     "@_name"?: string;
 }
 
+const xmlFileCache = new Map<string, string>();
+
 
 export async function findXmlFiles(directory: string): Promise<string[]> {
     const entries = await readdir(directory, {
@@ -53,9 +55,7 @@ export async function findXmlFilesContainingText(
 ): Promise<XmlTextMatch[]> {
     const matches: XmlTextMatch[] = [];
 
-    for (const xmlFile of xmlFiles) {
-        const contents = await readFile(xmlFile, "utf8");
-
+    for (const [xmlFile, contents] of xmlFileCache) {
         let searchFrom = 0;
 
         while (true) {
@@ -76,6 +76,48 @@ export async function findXmlFilesContainingText(
 
             searchFrom =
                 occurrenceIndex + searchText.length;
+
+        }
+    }
+
+    if (matches.length > 0) {
+        console.log(
+            `XML cache hit: "${searchText}" (${matches.length} matches)`
+        )
+        return matches;
+    }
+
+    console.log(
+        `XML cache miss: "${searchText}" — scanning all XML files`
+    );
+
+    for (const xmlFile of xmlFiles) {
+        const contents = await readFile(xmlFile, "utf8");
+        let searchFrom = 0;
+        let thisFileHadAMatch = false;
+
+        while (true) {
+            const occurrenceIndex = contents.indexOf(
+                searchText,
+                searchFrom,
+            );
+
+            if (occurrenceIndex === -1) {
+                break;
+            }
+
+            matches.push({
+                searchText,
+                xmlFile,
+                occurrenceIndex,
+            });
+
+            searchFrom =
+                occurrenceIndex + searchText.length;
+            thisFileHadAMatch = true;
+        }
+        if (thisFileHadAMatch) {
+            xmlFileCache.set(xmlFile, contents);
         }
     }
 

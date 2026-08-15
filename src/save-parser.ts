@@ -397,5 +397,33 @@ export function isDialogueCandidate(
         return false;
     }
 
+    if (trimmed.startsWith("HIDDEN ")) {
+        return false;
+    }
+
+    if (trimmed === "should not be seen") {
+        return false;
+    }
+
+    if (trimmed.startsWith("[NOTORIETY ")) {
+        return false;
+    }
+
+    if (trimmed.startsWith("SHIP_AUTO_WARNING ")) {
+        return false;
+    }
+
+    if (trimmed === "ESSENTIAL SYSTEMS") {
+        return false;
+    }
+
+    if (trimmed.startsWith("SHIP_REBEL_DROPPOINT_FORTIFICATIONS ")) {
+        return false;
+    }
+
+    if (trimmed.startsWith("SHIP_FREEMANTIS_START_CHALLENGE ")) {
+        return false;
+    }
+
     return true;
 }
