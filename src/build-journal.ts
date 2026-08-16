@@ -112,19 +112,7 @@ async function buildJournal(
         "utf8",
     );
 
-    const htmlBody = await marked(markdownString);
-
-    const htmlString = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FTL Journal</title>
-</head>
-<body>
-    ${htmlBody}
-</body>
-</html>`;
+    const htmlString = await renderHtmlJournal(journalJumps);
 
     const htmlOutputPath = path.join(directory, "z-journal.html");
 
@@ -187,7 +175,103 @@ function renderMarkdownEntry(jump: JournalJump): string {
     return lines.join("\n");
 }
 
+async function renderHtmlJournal(
+    journalJumps: JournalJump[]
+): Promise<string> {
+    const htmlJumpEntries = await Promise.all(
+        journalJumps.map(async (jump, index) => {
+            const markdown = renderMarkdownEntry(jump);
+            const html = await marked(markdown);
 
+            return `
+            <section
+                class="journal-jump"
+                data-jump-index="${index}"
+                ${index === 0 ? "" : "hidden"}
+            >
+                ${html}
+            </section>`;
+        })
+    );
+
+    const jumpOptions = journalJumps
+        .map(
+            (jump, index) =>
+                `<option value="${index}">Jump ${jump.jumpCount}</option>`
+        )
+        .join("\n");
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FTL Journal</title>
+</head>
+<body>
+    <nav>
+        <button id="previous-jump">Previous Jump</button>
+
+        <select id="jump-selector">
+            ${jumpOptions}
+        </select>
+
+        <button id="next-jump">Next Jump</button>
+    </nav>
+
+    <main>
+        ${htmlJumpEntries.join("\n")}
+    </main>
+    <script>
+    const jumps = Array.from(
+        document.querySelectorAll(".journal-jump")
+    );
+
+    const previousButton =
+        document.getElementById("previous-jump");
+
+    const nextButton =
+        document.getElementById("next-jump");
+
+    const jumpSelector =
+        document.getElementById("jump-selector");
+
+    let currentJumpIndex = 0;
+
+    function showJump(index) {
+        if (index < 0 || index >= jumps.length) {
+            return;
+        }
+
+        jumps[currentJumpIndex].hidden = true;
+
+        currentJumpIndex = index;
+
+        jumps[currentJumpIndex].hidden = false;
+        jumpSelector.value = String(currentJumpIndex);
+
+        previousButton.disabled = currentJumpIndex === 0;
+        nextButton.disabled =
+            currentJumpIndex === jumps.length - 1;
+    }
+
+    previousButton.addEventListener("click", () => {
+        showJump(currentJumpIndex - 1);
+    });
+
+    nextButton.addEventListener("click", () => {
+        showJump(currentJumpIndex + 1);
+    });
+
+    jumpSelector.addEventListener("change", () => {
+        showJump(Number(jumpSelector.value));
+    });
+
+    showJump(0);
+</script>
+</body>
+</html>`;
+}
 
 
 
