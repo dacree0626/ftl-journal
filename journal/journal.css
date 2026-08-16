@@ -1,0 +1,156 @@
+:root {
+    --background: #090d12;
+    --panel-background: rgba(27, 34, 40, 0.94);
+    --panel-background-light: #3a3738;
+
+    --border: #d9ffff;
+    --text: #f2f4ec;
+    --muted-text: #aeb9b6;
+
+    --active: #70ff72;
+    --highlight: #fff44f;
+
+    --control-background: #393536;
+    --control-hover: #514c4d;
+    --control-disabled: #232526;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+
+    background:
+        radial-gradient(
+            circle at top,
+            #182530 0%,
+            var(--background) 60%
+        );
+
+    color: var(--text);
+
+    font-family:
+        "Courier New",
+        Consolas,
+        monospace;
+
+    font-size: 16px;
+}
+
+nav {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+
+    padding: 14px;
+
+    background: rgba(9, 13, 18, 0.95);
+
+    border-bottom: 3px solid var(--border);
+}
+
+button,
+select {
+    min-height: 42px;
+
+    padding: 8px 16px;
+
+    background: var(--control-background);
+
+    border: 3px solid var(--border);
+    border-radius: 4px;
+
+    color: var(--text);
+
+    font: inherit;
+    font-weight: bold;
+    text-transform: uppercase;
+
+    cursor: pointer;
+}
+
+button:hover,
+select:hover {
+    background: var(--control-hover);
+
+    color: var(--highlight);
+}
+
+button:disabled {
+    background: var(--control-disabled);
+    color: #666;
+
+    border-color: #667070;
+
+    cursor: default;
+}
+
+select {
+    min-width: 150px;
+    text-align: center;
+}
+
+main {
+    width: min(900px, calc(100% - 40px));
+
+    margin: 40px auto;
+}
+
+.journal-jump {
+    padding: 28px 34px;
+
+    background: var(--panel-background);
+
+    border: 4px solid var(--border);
+    border-radius: 8px;
+
+    box-shadow:
+        0 0 0 2px #53666a,
+        0 0 18px rgba(190, 255, 255, 0.18);
+}
+
+.journal-jump h2 {
+    margin-top: 0;
+
+    color: var(--border);
+
+    font-size: 28px;
+    text-transform: uppercase;
+}
+
+.journal-jump h3 {
+    margin-top: 28px;
+
+    color: var(--active);
+
+    text-transform: uppercase;
+
+    border-bottom: 1px solid #687878;
+    padding-bottom: 6px;
+}
+
+.journal-jump strong {
+    color: var(--highlight);
+}
+
+.journal-jump ul {
+    padding-left: 24px;
+}
+
+.journal-jump li {
+    margin: 10px 0;
+
+    line-height: 1.5;
+}
+
+.journal-jump li::marker {
+    color: var(--active);
+}

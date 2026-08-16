@@ -209,7 +209,10 @@ async function renderHtmlJournal(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>FTL Journal</title>
+
+    <link rel="stylesheet" href="/journal.css">
 </head>
 <body>
     <nav>
@@ -225,7 +228,7 @@ async function renderHtmlJournal(
     <main>
         ${htmlJumpEntries.join("\n")}
     </main>
-    
+
     <script src="/journal.js"></script>
 </body>
 </html>`;

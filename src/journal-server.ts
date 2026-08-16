@@ -104,6 +104,41 @@ export function startJournalServer(
             return;
         }
 
+        if (request.url === "/journal.css") {
+            const journalCssPath = path.resolve(
+                "journal",
+                "journal.css"
+            );
+
+            try {
+                const css = await readFile(
+                    journalCssPath,
+                    "utf8"
+                );
+
+                response.writeHead(200, {
+                    "Content-Type": "text/css; charset=utf-8",
+                });
+
+                response.end(css);
+            } catch (error) {
+                response.writeHead(500, {
+                    "Content-Type": "text/plain; charset=utf-8",
+                });
+
+                response.end(
+                    "Could not load the journal stylesheet."
+                );
+
+                console.error(
+                    "Could not serve journal stylesheet:",
+                    error
+                );
+            }
+
+            return;
+        }
+
         response.writeHead(404, {
             "Content-Type": "text/plain; charset=utf-8",
         });
