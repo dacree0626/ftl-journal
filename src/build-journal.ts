@@ -1,9 +1,21 @@
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { marked } from "marked";
 
+import type { SnapshotMetadata } from "./process-snapshot.js";
+
+import type {
+    XmlEventMatch
+} from "./xml-search.js"
 
 interface CommandLineArguments {
     directory: string | undefined;
+}
+
+interface JournalJump {
+    jumpCount: number;
+    sectorType: string;
+    events: XmlEventMatch[];
 }
 
 const commandLineArguments = parseCommandLineArguments()
@@ -73,21 +85,24 @@ async function buildJournal(
     const outputPath = path.join(directory, "z-journal.md");
     const jsonFiles = await findJsonFiles(directory);
 
-    const markdownEntries: string[] = [];
+    const snapshots: SnapshotMetadata[] = [];
 
     console.log(`JSON files found: ${jsonFiles.length}`);
 
-
     for (const file of jsonFiles) {
         const contents = await readFile(file, "utf8");
-        const snapshot = JSON.parse(contents);
+        const snapshot = JSON.parse(contents) as SnapshotMetadata;
 
-        const markdownEntry = renderMarkdownEntry(snapshot);
-
-        markdownEntries.push(markdownEntry);
+        snapshots.push(snapshot);
     }
 
-    console.log(`Markdown entries created: ${markdownEntries.length}`);
+    const journalJumps = buildJournalJumps(snapshots);
+
+    const markdownEntries = journalJumps.map(
+        (jump) => renderMarkdownEntry(jump)
+    );
+
+    console.log(`Journal jumps created: ${journalJumps.length}`);
 
     const markdownString = markdownEntries.join("\n\n");
 
@@ -97,21 +112,68 @@ async function buildJournal(
         "utf8",
     );
 
+    const htmlBody = await marked(markdownString);
+
+    const htmlString = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FTL Journal</title>
+</head>
+<body>
+    ${htmlBody}
+</body>
+</html>`;
+
+    const htmlOutputPath = path.join(directory, "z-journal.html");
+
+    await writeFile(
+        htmlOutputPath,
+        htmlString,
+        "utf8",
+    );
 }
 
-function renderMarkdownEntry(snapshot: any): string {
+function buildJournalJumps(
+    snapshots: SnapshotMetadata[]
+): JournalJump[] {
+    const journalJumps: JournalJump[] = [];
+
+    for (const snapshot of snapshots) {
+        const previousJump = journalJumps.at(-1);
+
+        if (
+            previousJump &&
+            previousJump.jumpCount === snapshot.jumpCount
+        ) {
+            previousJump.events.push(...snapshot.xmlEvents);
+            continue;
+        }
+
+        journalJumps.push({
+            jumpCount: snapshot.jumpCount,
+            sectorType: snapshot.sectorType,
+            events: [...snapshot.xmlEvents],
+        });
+    }
+
+    return journalJumps;
+}
+
+function renderMarkdownEntry(jump: JournalJump): string {
     const lines: string[] = [];
 
-    lines.push(`## Jump ${snapshot.jumpCount}`);
+    lines.push(`## Jump ${jump.jumpCount}`);
     lines.push("");
-    lines.push(`**Sector:** ${snapshot.sectorType}`);
+    lines.push(`**Sector:** ${jump.sectorType}`);
 
-    if (snapshot.xmlEvents?.length > 0) {
+    if (jump.events.length > 0) {
         lines.push("");
         lines.push("### Events");
         lines.push("");
 
-        for (const event of snapshot.xmlEvents) {
+        for (const event of jump.events) {
             if (event.searchText) {
                 lines.push(`- ${event.searchText}`);
             }
@@ -125,7 +187,11 @@ function renderMarkdownEntry(snapshot: any): string {
     return lines.join("\n");
 }
 
+
+
+
+
 buildJournal(directory).catch((error: unknown) => {
-    console.error("Watcher failed to start:", error);
+    console.error("Journal build failed:", error);
     process.exitCode = 1;
 });
