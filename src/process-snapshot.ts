@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import {
@@ -48,7 +49,7 @@ export interface SnapshotMetadata {
     sourceSize: number;
     jumpCount: number;
     sectorType: string;
-    currentBeaconIndex: number;
+    currentBeaconIndex: number | null;
     dialogueCandidates: string[];
     dialogueInXml: XmlTextMatch[];
     xmlEvents: XmlEventMatch[]

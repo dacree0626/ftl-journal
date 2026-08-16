@@ -49,7 +49,7 @@ export interface ParsedInitialCrew {
 
 export interface ParsedSectorState {
     sectorType: string;
-    currentBeaconIndex: number;
+    currentBeaconIndex: number | null;
     sectorTypeOffset: number;
     currentBeaconIndexOffset: number;
 }
@@ -168,20 +168,27 @@ export function parseSectorState(
             currentBeaconIndexOffset,
         );
 
+    const currentBeaconIndex =
+        currentBeaconIndexResult.value >= 65535
+            ? null
+            : currentBeaconIndexResult.value;
+
     if (
-        currentBeaconIndexResult.value < 0 ||
-        currentBeaconIndexResult.value > 1000
+        currentBeaconIndex !== null &&
+        (
+            currentBeaconIndex < 0 ||
+            currentBeaconIndex > 1000
+        )
     ) {
         throw new Error(
             `Parsed an implausible current beacon index: ` +
-            `${currentBeaconIndexResult.value}`,
+            `${currentBeaconIndex}`,
         );
     }
 
     return {
         sectorType,
-        currentBeaconIndex:
-            currentBeaconIndexResult.value,
+        currentBeaconIndex,
         sectorTypeOffset,
         currentBeaconIndexOffset,
     };
