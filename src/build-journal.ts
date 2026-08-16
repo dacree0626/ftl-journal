@@ -190,7 +190,7 @@ async function renderHtmlJournal(
             <section
                 class="journal-jump"
                 data-jump-index="${index}"
-                ${index === 0 ? "" : "hidden"}
+                ${index === journalJumps.length - 1 ? "" : "hidden"}
             >
                 ${html}
             </section>`;
@@ -226,7 +226,7 @@ async function renderHtmlJournal(
         ${htmlJumpEntries.join("\n")}
     </main>
     <script>
-    const jumps = Array.from(
+    let jumps = Array.from(
         document.querySelectorAll(".journal-jump")
     );
 
@@ -239,7 +239,7 @@ async function renderHtmlJournal(
     const jumpSelector =
         document.getElementById("jump-selector");
 
-    let currentJumpIndex = 0;
+    let currentJumpIndex = jumps.length - 1;
 
     function showJump(index) {
         if (index < 0 || index >= jumps.length) {
@@ -270,7 +270,40 @@ async function renderHtmlJournal(
         showJump(Number(jumpSelector.value));
     });
 
-    showJump(0);
+    showJump(jumps.length - 1);
+
+    const events = new EventSource("/events");
+
+    events.addEventListener("journal-updated", async () => {
+    const response = await fetch("/");
+    const updatedHtml = await response.text();
+
+    const parser = new DOMParser();
+    const updatedDocument =
+        parser.parseFromString(updatedHtml, "text/html");
+
+    const updatedMain =
+        updatedDocument.querySelector("main");
+
+    const updatedJumpSelector =
+        updatedDocument.getElementById("jump-selector");
+
+    if (!updatedMain || !updatedJumpSelector) {
+        return;
+    }
+
+    document.querySelector("main").innerHTML =
+        updatedMain.innerHTML;
+
+    jumpSelector.innerHTML =
+        updatedJumpSelector.innerHTML;
+
+    jumps = Array.from(
+        document.querySelectorAll(".journal-jump")
+    );
+
+    showJump(jumps.length - 1);
+});
 </script>
 </body>
 </html>`;

@@ -17,6 +17,11 @@ import {
     buildJournal
 } from "./build-journal.js"
 
+import {
+    notifyJournalUpdated,
+    startJournalServer
+} from "./journal-server.js"
+
 function getRequiredEnvironmentVariable(name: string): string {
     const value = process.env[name];
 
@@ -137,6 +142,7 @@ async function archiveSave(
         );
 
         await buildJournal(SESSION_DIRECTORY);
+        notifyJournalUpdated();
 
         console.log(
             `Saved snapshot ${snapshotNumber} at ` +
@@ -175,6 +181,8 @@ async function processSaveChange(): Promise<void> {
 
 async function startWatching(): Promise<void> {
     await mkdir(SESSION_DIRECTORY, { recursive: true });
+
+    startJournalServer(SESSION_DIRECTORY);
 
     console.log("Watching FTL save file:");
     console.log(SAVE_FILE);
