@@ -8,7 +8,8 @@
     "inspect": "tsx src/inspect-save.ts",
     "compare": "tsx src/compare-save.ts",
     "lookup": "tsx src/lookup-event.ts",
-    "process": "tsx src/process-snapshot.ts"
+    "process": "tsx src/process-snapshot.ts",
+    "journal": "tsx src/build-journal.ts"
   },
   "keywords": [],
   "author": "",
