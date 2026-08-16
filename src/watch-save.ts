@@ -13,6 +13,9 @@ import {
     processSnapshot
 } from "./process-snapshot.js"
 
+import {
+    buildJournal
+} from "./build-journal.js"
 
 function getRequiredEnvironmentVariable(name: string): string {
     const value = process.env[name];
@@ -132,6 +135,8 @@ async function archiveSave(
                 sourceSize: saveStats.size,
             },
         );
+
+        await buildJournal(SESSION_DIRECTORY);
 
         console.log(
             `Saved snapshot ${snapshotNumber} at ` +

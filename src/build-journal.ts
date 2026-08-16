@@ -18,10 +18,6 @@ interface JournalJump {
     events: XmlEventMatch[];
 }
 
-const commandLineArguments = parseCommandLineArguments()
-
-const directory = commandLineArguments.directory;
-
 function parseCommandLineArguments(): CommandLineArguments {
     const userArguments = process.argv.slice(2);
 
@@ -50,11 +46,9 @@ function parseCommandLineArguments(): CommandLineArguments {
     };
 }
 
-export async function findJsonFiles(directory: string | undefined):
-    Promise<string[]> {
-    if (!directory) {
-        throw new Error("No directory was provided.");
-    }
+export async function findJsonFiles(
+    directory: string
+): Promise<string[]> {
 
     const entries = await readdir(directory, {
         withFileTypes: true,
@@ -75,12 +69,9 @@ export async function findJsonFiles(directory: string | undefined):
     return files.sort();
 }
 
-async function buildJournal(
-    directory: string | undefined
+export async function buildJournal(
+    directory: string
 ): Promise<void> {
-    if (!directory) {
-        throw new Error("No directory was provided.");
-    }
 
     const outputPath = path.join(directory, "z-journal.md");
     const jsonFiles = await findJsonFiles(directory);
@@ -121,6 +112,18 @@ async function buildJournal(
         htmlString,
         "utf8",
     );
+}
+
+const requestedDirectory =
+    process.argv[1]?.endsWith("build-journal.ts")
+        ? parseCommandLineArguments().directory
+        : undefined;
+
+if (requestedDirectory !== undefined) {
+    buildJournal(requestedDirectory).catch((error: unknown) => {
+        console.error("Journal build failed:", error);
+        process.exitCode = 1;
+    });
 }
 
 function buildJournalJumps(
@@ -272,10 +275,3 @@ async function renderHtmlJournal(
 </body>
 </html>`;
 }
-
-
-
-buildJournal(directory).catch((error: unknown) => {
-    console.error("Journal build failed:", error);
-    process.exitCode = 1;
-});
