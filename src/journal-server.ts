@@ -69,6 +69,41 @@ export function startJournalServer(
             return;
         }
 
+        if (request.url === "/journal.js") {
+            const journalScriptPath = path.resolve(
+                "journal",
+                "journal.js"
+            );
+
+            try {
+                const javascript = await readFile(
+                    journalScriptPath,
+                    "utf8"
+                );
+
+                response.writeHead(200, {
+                    "Content-Type": "text/javascript; charset=utf-8",
+                });
+
+                response.end(javascript);
+            } catch (error) {
+                response.writeHead(500, {
+                    "Content-Type": "text/plain; charset=utf-8",
+                });
+
+                response.end(
+                    "Could not load the journal script."
+                );
+
+                console.error(
+                    "Could not serve journal script:",
+                    error
+                );
+            }
+
+            return;
+        }
+
         response.writeHead(404, {
             "Content-Type": "text/plain; charset=utf-8",
         });
